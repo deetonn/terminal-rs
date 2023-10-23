@@ -12,11 +12,19 @@ pub struct Color {
 
 pub trait WithConsoleColor {
     fn with_color(&self, color: Ref<'_, Color>) -> String;
+    fn rgb(&self, color: &Color) -> String;
 }
 
 impl WithConsoleColor for String {
     fn with_color(&self, color: Ref<'_, Color>) -> String {
         format!("{}{}{}", 
+            color.to_ansi_color(),
+            self,
+            Color::reset())
+    }
+
+    fn rgb(&self, color: &Color) -> String {
+        format!("{}{}{}",
             color.to_ansi_color(),
             self,
             Color::reset())
@@ -50,8 +58,16 @@ impl Color {
         Self::new(255, 0, 0)
     }
 
+    pub fn light_red() -> Color {
+        Self::new(255, 60, 38)
+    }
+
     pub fn green() -> Color {
         Self::new(0, 255, 0)
+    }
+
+    pub fn light_green() -> Color {
+        Self::new(25, 250, 180)
     }
 }
 
