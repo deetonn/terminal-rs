@@ -1,17 +1,10 @@
-
-#[cfg(windows)]
-use std::os::windows::prelude::MetadataExt;
-
-use std::{cell::Ref, path::Path, fs::Metadata};
-use crate::core::settings::Color;
+use std::{cell::Ref, path::Path};
+use crate::core::settings::{Color, WithConsoleColor};
 use crate::{commands::Cmd, core::Terminal};
 use super::{UniError, AsStr};
-use chrono::offset::Utc;
-use chrono::DateTime;
+use is_executable::IsExecutable;
 use super::args::ArgInfo;
-
-#[cfg(not(windows))]
-use std::os::linux::fs::MetadataExt;
+use termsize::Size;
 
 //macro_rules! println_if {
 //    ($cond:expr, $fmt:literal $(,)? $($arg:tt)*) => {{
@@ -170,48 +163,6 @@ impl Cmd for CdCommand {
 
 pub struct LsCommand;
 
-impl LsCommand {
-    fn get_folder_string(&self, path: &Path, meta: &Metadata) -> String {
-        let name = path.file_name().unwrap().to_str().unwrap();
-        let time_of_creation = match meta.created() {
-            Ok(time) => {
-                let date_time: DateTime<Utc> = time.into();
-                format!("{}", date_time.format("%d/%m/%Y %T"))
-            },
-            Err(_) => {
-                "unknown".to_string()
-            }
-        };
-
-        #[cfg(windows)]
-        let size = meta.file_size();
-        #[cfg(not(windows))]
-        let size = meta.st_size();
-
-        format!("{: >4} {: >5} {: >5} {: >5}", "<DIR>", time_of_creation, size, name)
-    }
-
-    fn get_file_string(&self, path: &Path, meta: &Metadata) -> String {
-        let name = path.file_name().unwrap().to_str().unwrap();
-        let time_of_creation = match meta.created() {
-            Ok(time) => {
-                let date_time: DateTime<Utc> = time.into();
-                format!("{}", date_time.format("%d/%m/%Y %T"))
-            },
-            Err(_) => {
-                "unknown".to_string()
-            }
-        };
-
-        #[cfg(windows)]
-        let size = meta.file_size();
-        #[cfg(not(windows))]
-        let size = meta.st_size();
-
-        format!("{: >5} {: >5} {: >5} {: >5}", "<FILE>", time_of_creation, size, name)
-    }
-}
-
 impl Cmd for LsCommand {
     fn name(&self) -> &str {
         "ls"
@@ -225,14 +176,16 @@ impl Cmd for LsCommand {
         Some("
         list items in the current directory.
 
-        arguments:
-          -c: show column names above the output.
+        flags:
+          -f: enable filtering
+            -X: filter out executable files
+            -D: filter out directorys
+            -F: filter out regular files
         ")
     }
 
     fn execute(&self, ctx: Ref<'_, &Terminal>, args: Vec<&str>) -> Result<(), Box<dyn AsStr>> {
-        let flags = ArgInfo::new(&args);
-
+        let info = ArgInfo::new(&args);
         let working_directory = ctx.current_path();
 
         let iterator = match std::fs::read_dir(&*working_directory) {
@@ -244,8 +197,9 @@ impl Cmd for LsCommand {
             }
         };
 
-        let mut files = vec![];
-        let mut folders = vec![];
+        let mut items = vec![];
+
+        let has_filter = info.has_flag('f');
 
         for entry in iterator {
             let entry = match entry {
@@ -253,41 +207,61 @@ impl Cmd for LsCommand {
                 Err(e) => return Err(UniError::IoError(e).boxed())
             };
             let path = entry.path();
-            let metadata = match path.metadata() {
-                Ok(meta) => meta,
-                Err(e) => {
-                    return Err(
-                        UniError::IoError(e).boxed()
-                    )
+
+            let os_name = entry.file_name();
+            let name = os_name.to_str().unwrap().to_string();
+            const FILTERED_ITEM: &'static str = "(*)";
+
+            if path.is_executable() {
+                if info.has_flag('X') && has_filter {
+                    items.push((FILTERED_ITEM.to_string(), format!("(*)")));
                 }
-            };
+                else {
+                    items.push((name.clone(), format!("{}", name).rgb(&Color::light_green())));
+                }
+            }
 
             if path.is_dir() {
-                folders.push(self.get_folder_string(&path, &metadata))
+                if info.has_flag('D') && has_filter {
+                    items.push((FILTERED_ITEM.to_string(), format!("(*)")));
+                }
+                else {
+                    items.push((name.clone(), format!("{}", name).rgb(&Color::light_blue())));
+                }
             }
+
             if path.is_file() {
-                files.push(self.get_file_string(&path, &metadata));
+                if info.has_flag('F') && has_filter {
+                    items.push((FILTERED_ITEM.to_string(), format!("(*)")));
+                }
+                else {
+                    items.push((name.clone(), format!("{}", name).rgb(&Color::light_red())));
+                }
             }
         }
 
-        let mut final_result: Vec<String> = Vec::new();
-        final_result.append(&mut folders);
-        final_result.append(&mut files);
+        print!("* {} ", "Executable".to_string().rgb(&Color::light_green()));
+        print!("* {} ", "Directory".to_string().rgb(&Color::light_blue()));
+        print!("* {}", "File".to_string().rgb(&Color::light_red()));
+        println!();
 
-        if final_result.is_empty() {
-            println!("this folder is empty.");
-            return Ok(());
+        let Size { cols: _, mut rows } = termsize::get().unwrap();
+        rows = rows * 6;
+
+        let mut total = 0usize;
+
+        for (original, item) in items {
+            total += original.len();
+
+            if total > rows as usize {
+                println!();
+                total = 0;
+            }
+
+            print!("{}   ", item);
         }
 
-        // display column names
-        if flags.has_flag('c') {
-            println!("TYPE CREATED SIZE NAME")
-        }
-
-        for thing in final_result {
-            println!("{}", thing);
-        }
-
+        println!();
         Ok(())
     }
 }
