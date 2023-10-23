@@ -71,7 +71,13 @@ impl Cmd for PathLoadedCommand {
     }
 
     fn docs(&self) -> Option<&str> {
-        None
+        Some("
+        This command is a file located on the filesystem.
+
+        custom-options:
+          --trs-sandbox: if this flag is present, the command is ran without any environment
+                         variables, and isn't inserted into the actual arguments.
+        ")
     }
 
     fn is_builtin(&self) -> bool {
@@ -89,7 +95,13 @@ impl Cmd for PathLoadedCommand {
         command.stdin(Stdio::inherit());
         command.stderr(Stdio::inherit());
 
+        // command.
+
         for arg in args {
+            if arg.to_string() == "--trs-sandbox".to_string() {
+                command.env_clear();
+                continue
+            }
             command.arg(arg);
         }
 
