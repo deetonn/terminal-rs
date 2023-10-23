@@ -3,6 +3,8 @@ use std::cell::{RefCell, Ref};
 
 use text_io::read;
 
+use crate::core::settings::Color;
+
 pub struct UserInput {
     hist: RefCell<Vec<String>>,
 }
@@ -17,8 +19,9 @@ impl UserInput {
     }
 
     pub fn get(&self, prompt: &str) -> String {
-        print!("{}", prompt);
+        print!("{}{}", prompt, Color::light_blue().to_ansi_color());
         let input: String = read!("{}\n");
+        print!("{}", Color::reset());
         self.hist.borrow_mut().push(input.clone());
         input
     }

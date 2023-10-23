@@ -1,14 +1,24 @@
 pub mod input;
-pub mod prompt;
+pub mod settings;
 
 use std::cell::{Cell, RefCell, Ref};
-use crate::commands::{Commands, impls::{HelpCommand, HistoryCommand}};
-use self::{input::UserInput, prompt::Prompt};
+use crate::commands::{Commands, impls::{
+    HelpCommand, 
+    HistoryCommand, 
+    CdCommand, 
+    LsCommand, 
+    ManCommand, 
+    ExitCommand, 
+    RmDirCommand, 
+    MkDirCommand, 
+    ConfigCommand, ClearCommand, WhereCommand
+}, AsStr};
+use self::{input::UserInput, settings::Settings};
 
 pub struct Terminal {
     cmds: Commands,
     inp: UserInput,
-    _prompt: Prompt,
+    _settings: Settings,
 
     // flags (how to bits work??)
     should_quit: Cell<bool>,
@@ -30,9 +40,15 @@ impl Into<String> for TerminalInitError {
 
 #[cfg(windows)]
 const USER_NAME_ENV_NAME: &'static str = "USERNAME";
-
 #[cfg(not(windows))]
 const USER_NAME_ENV_NAME: &'static str = "USER";
+
+#[cfg(windows)]
+const PATH_ENVVAR_SEP: char = ';';
+#[cfg(not(windows))]
+const PATH_ENVVAR_SEP: char = ':';
+
+const PATH_ENVIRONMENT_VAR: &'static str = "PATH";
 
 impl Terminal {
     pub fn new() -> Result<Terminal, TerminalInitError> {
@@ -40,6 +56,35 @@ impl Terminal {
 
         commands.push(Box::new(HelpCommand));
         commands.push(Box::new(HistoryCommand));
+        commands.push(Box::new(CdCommand));
+        commands.push(Box::new(LsCommand));
+        commands.push(Box::new(ManCommand));
+        commands.push(Box::new(ExitCommand));
+        commands.push(Box::new(RmDirCommand));
+        commands.push(Box::new(MkDirCommand));
+        commands.push(Box::new(ConfigCommand));
+        commands.push(Box::new(ClearCommand));
+        commands.push(Box::new(WhereCommand));
+
+        let path = match std::env::var(PATH_ENVIRONMENT_VAR) {
+            Ok(path) => Some(path),
+            Err(e) => {
+                eprintln!("failed to get `PATH` environment variable. ({})", e.to_string());
+                None
+            }
+        };
+
+        if let Some(path) = path {
+            let all_directorys: Vec<&str> = path.split(PATH_ENVVAR_SEP).collect();
+            for dir in all_directorys {
+                match commands.add_path_folder(dir.to_string()) {
+                    Ok(()) => {},
+                    Err(e) => {
+                        println!("ERROR: {}", e.to_string());
+                    }
+                }
+            }
+        }
 
         let current_path = match std::env::current_dir() {
             Ok(path) => {
@@ -62,13 +107,13 @@ impl Terminal {
             }
         };
 
-        let prompt = Prompt::new(current_path);
+        let prompt = Settings::from_save_or_default(current_path);
         *prompt.get_user_name() = user_name;
 
         Ok(Self {
             cmds: commands,
             inp: UserInput::new(),
-            _prompt: prompt,
+            _settings: prompt,
             should_quit: Cell::new(false),
         })
     }
@@ -77,13 +122,20 @@ impl Terminal {
         let this_ref = RefCell::new(self);
 
         while !self.should_quit.get() {
-            let built_prompt = self.prompt().build();
+            let built_prompt = self.settings().build_prompt();
             let data = self.input().get(built_prompt.as_str());
             match self.commands().try_execute(this_ref.borrow(), data) {
                 Ok(_) => {},
                 Err(e) => {
                     eprintln!("ERROR: {}", e.as_str());
                 }
+            }
+        }
+
+        match self.settings().save() {
+            Ok(_) => (),
+            Err(e) => {
+                eprintln!("ERROR: {}", e.as_str());
             }
         }
 
@@ -95,15 +147,15 @@ impl Terminal {
     }
 
     pub fn quit(&self) {
-        self.should_quit.set(false);
+        self.should_quit.set(true);
     }
 
-    pub fn prompt(&self) -> &Prompt {
-        &self._prompt
+    pub fn settings(&self) -> &Settings {
+        &self._settings
     }
 
     pub fn current_path(&self) -> Ref<'_, String> {
-        self.prompt().get_path_view()
+        self.settings().get_path_view()
     }
 
     pub fn commands(&self) -> &Commands {
