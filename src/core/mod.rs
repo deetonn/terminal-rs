@@ -79,9 +79,8 @@ impl Terminal {
             for dir in all_directorys {
                 match commands.add_path_folder(dir.to_string()) {
                     Ok(()) => {},
-                    Err(e) => {
-                        println!("ERROR: {}", e.to_string());
-                    }
+                    // TODO: log this information somewhere.
+                    Err(_) => ()
                 }
             }
         }
