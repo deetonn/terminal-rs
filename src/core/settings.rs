@@ -1,7 +1,7 @@
 use std::{cell::{RefCell, RefMut, Ref}, io, fs::DirEntry, path::Path};
 use serde::{Serialize, Deserialize};
 
-use crate::commands::AsStr;
+use crate::{commands::AsStr, logger::*};
 
 #[derive(Serialize, Deserialize)]
 pub struct Color {
@@ -139,6 +139,8 @@ impl Settings {
                     return Self::new(init_path);
                 }
             };
+            // set the working directory to whatever it was saved to.
+            deserialized.sync_path();
             return deserialized;
         }
         else {
@@ -168,6 +170,17 @@ impl Settings {
 
     pub fn get_path(&self) -> RefMut<'_, String> {
         self.path.borrow_mut()
+    }
+
+    pub fn sync_path(&self) {
+        let local_path = self.get_path();
+        let path = Path::new(&*local_path);
+        match std::env::set_current_dir(path) {
+            Ok(_) => (),
+            Err(e) => {
+                log!("failed to sync paths: {}", e.to_string());
+            }
+        };
     }
 
     pub fn get_path_view(&self) -> Ref<'_, String> {

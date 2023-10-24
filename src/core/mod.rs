@@ -11,7 +11,7 @@ use crate::commands::{Commands, impls::{
     ExitCommand, 
     RmDirCommand, 
     MkDirCommand, 
-    ConfigCommand, ClearCommand, WhereCommand
+    ConfigCommand, ClearCommand, WhereCommand, PwdCommand
 }, AsStr};
 use self::{input::UserInput, settings::Settings};
 
@@ -65,6 +65,7 @@ impl Terminal {
         commands.push(Box::new(ConfigCommand));
         commands.push(Box::new(ClearCommand));
         commands.push(Box::new(WhereCommand));
+        commands.push(Box::new(PwdCommand));
 
         let path = match std::env::var(PATH_ENVIRONMENT_VAR) {
             Ok(path) => Some(path),

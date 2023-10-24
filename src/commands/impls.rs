@@ -645,3 +645,43 @@ impl Cmd for WhereCommand {
 
 pub struct PwdCommand;
 
+impl Cmd for PwdCommand {
+    fn name(&self) -> &str {
+        "pwd"
+    }
+
+    fn desc(&self) -> Option<&str> {
+        Some("see the current working directory")
+    }
+
+    fn docs(&self) -> Option<&str> {
+        Some("
+        This command will output the current working directory.
+
+        We will show what the current directory is according to
+        std::env::current_dir() and also our current location that
+        we track.
+
+        NOTE: They are typically the same location.
+        ")
+    }
+
+    fn execute(&self, ctx: Ref<'_, &Terminal>, _args: Vec<&str>) -> Result<(), Box<dyn AsStr>> {
+        let settings = ctx.settings();
+        let our_location = settings.get_path();
+
+        let sys_dir = match std::env::current_dir() {
+            Ok(buf) => {
+                buf.as_path().as_os_str().to_str().unwrap().to_string()
+            },
+            Err(e) => {
+                format!("failed to get path via system. ({})", e.to_string())
+            }
+        };
+
+        println!("locally: {}", our_location);
+        println!("sys: {}", sys_dir);
+
+        Ok(())
+    }
+}
