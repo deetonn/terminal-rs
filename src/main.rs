@@ -1,5 +1,7 @@
 pub mod core;
 pub mod commands;
+#[macro_use]
+pub mod logger;
 
 use crate::core::*;
 
